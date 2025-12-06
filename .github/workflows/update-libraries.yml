@@ -1,0 +1,55 @@
+name: Update Libraries
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download library_index.tar.bz2
+      run: |
+        curl -L https://downloads.arduino.cc/libraries/library_index.tar.bz2 -o library_index.tar.bz2
+
+    - name: Extract library_index.json
+      run: |
+        tar -xf library_index.tar.bz2 library_index.json
+
+    - name: Install jq
+      run: sudo apt-get update && sudo apt-get install -y jq bzip2
+
+    - name: Merge and compress libraries
+      run: |
+        LOCAL_LIBS=$(jq '.libraries | map(. + {source: "local"})' libraries.json)
+        ARDUINO_LIBS=$(jq '.libraries | map(. + {source: "arduino"})' library_index.json)
+
+        # Merge logic: Prioritize localLibraries for duplicates, otherwise add arduinoLibraries
+        # First, create a temporary array of local library names for filtering
+        LOCAL_LIB_NAMES=$(jq -c '[.[] | .name]' libraries.json)
+
+        # Filter out Arduino libraries that are already in localLibraries
+        FILTERED_ARDUINO_LIBS=$(jq --argjson local_lib_names "$LOCAL_LIB_NAMES" \
+                                   '. | map(select(.name as $name | $local_lib_names | index($name) | not))' \
+                                   <<< "$ARDUINO_LIBS")
+
+        MERGED_LIBS=$(jq -c '. + '"$FILTERED_ARDUINO_LIBS" <<< "$LOCAL_LIBS")
+
+        jq -n --argjson merged "$MERGED_LIBS" '{libraries: $merged}' > merged_libraries.json
+
+        # Compress to .tar.bz2
+        tar -cvjf merged_libraries.tar.bz2 merged_libraries.json
+
+    - name: Commit and push to gh-pages
+      uses: EndBug/add-and-commit@v9
+      with:
+        add: 'merged_libraries.tar.bz2'
+        branch: 'gh-pages'
+        message: 'Update merged libraries'
+        author_name: 'github-actions[bot]'
+        author_email: 'github-actions[bot]@users.noreply.github.com'
