@@ -24,6 +24,24 @@ jobs:
       run: |
         tar -xf library_index.tar.bz2 library_index.json
 
+    - name: Create custom libraries directory
+      run: mkdir -p custom_libraries
+
+    - name: Download custom library.properties files
+      run: |
+        # Read libraries.txt, convert GitHub repo URLs to raw library.properties URLs
+        # and download them into the custom_libraries directory.
+        cat libraries.txt | while read repo_url; do
+          if [[ "$repo_url" == *"github.com"* ]]; then
+            # Assuming main branch, replace with 'refs/heads/main' for raw content URL
+            raw_url=$(echo "$repo_url" | sed 's/github.com/raw.githubusercontent.com/' | sed 's/\.git$//')
+            properties_url="${raw_url}/refs/heads/main/library.properties"
+            repo_name=$(basename "$repo_url" .git)
+            echo "Downloading ${properties_url} to custom_libraries/${repo_name}.properties"
+            curl -L "$properties_url" -o "custom_libraries/${repo_name}.properties"
+          fi
+        done
+
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
@@ -39,19 +57,64 @@ jobs:
           const compressjs = require('compressjs');
           const Bzip2 = compressjs.Bzip2; // Correctly reference Bzip2 algorithm
 
-          const localLibraries = JSON.parse(fs.readFileSync('libraries.json', 'utf8'));
-          const arduinoLibraries = JSON.parse(fs.readFileSync('library_index.json', 'utf8'));
+          const localLibraries = JSON.parse(fs.readFileSync('libraries.json', 'utf8')).libraries;
+          const arduinoLibraries = JSON.parse(fs.readFileSync('library_index.json', 'utf8')).libraries;
 
-          // Merge logic: Prioritize localLibraries for duplicates, otherwise add arduinoLibraries
-          const mergedLibraries = {
-            libraries: [
-              ...localLibraries.libraries.map(lib => ({ ...lib, source: 'local' })),
-              ...arduinoLibraries.libraries.filter(
-                arduinoLib => !localLibraries.libraries.some(localLib => localLib.name === arduinoLib.name)
-              ).map(lib => ({ ...lib, source: 'arduino' }))
-            ]
-          };
+          // Function to parse .properties file content into a JSON object
+          function parseProperties(content) {
+            const lines = content.split('\\n').filter(line => line.trim() !== '' && !line.startsWith('#'));
+            const obj = {};
+            lines.forEach(line => {
+              const parts = line.split('=');
+              if (parts.length > 1) {
+                const key = parts[0].trim();
+                const value = parts.slice(1).join('=').trim();
+                obj[key] = value;
+              }
+            });
+            return obj;
+          }
 
+          // Read custom library.properties files
+          const customLibrariesDir = 'custom_libraries';
+          let customLibraries = [];
+          if (fs.existsSync(customLibrariesDir)) {
+            const customFiles = fs.readdirSync(customLibrariesDir);
+            for (const file of customFiles) {
+              if (file.endsWith('.properties')) {
+                const filePath = `${customLibrariesDir}/${file}`;
+                const content = fs.readFileSync(filePath, 'utf8');
+                const parsedLib = parseProperties(content);
+                // Ensure the parsed library has a 'name' field for merging
+                if (parsedLib.name) {
+                  customLibraries.push({ ...parsedLib, source: 'custom' });
+                  console.log('Parsed custom library:', JSON.stringify(parsedLib)); // Log custom library objects
+                }
+              }
+            }
+          }
+
+          // Merge logic: Prioritize customLibraries > localLibraries > arduinoLibraries
+          let finalLibraries = [];
+
+          // Add custom libraries first
+          finalLibraries.push(...customLibraries);
+
+          // Add local libraries, if not already present in customLibraries
+          localLibraries.forEach(localLib => {
+            if (!finalLibraries.some(lib => lib.name === localLib.name)) {
+              finalLibraries.push({ ...localLib, source: 'local' });
+            }
+          });
+
+          // Add arduino libraries, if not already present in customLibraries or localLibraries
+          arduinoLibraries.forEach(arduinoLib => {
+            if (!finalLibraries.some(lib => lib.name === arduinoLib.name)) {
+              finalLibraries.push({ ...arduinoLib, source: 'arduino' });
+            }
+          });
+
+          const mergedLibraries = { libraries: finalLibraries };
           const mergedJson = JSON.stringify(mergedLibraries, null, 2);
           fs.writeFileSync('merged_libraries.json', mergedJson);
 
