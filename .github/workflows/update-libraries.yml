@@ -128,15 +128,15 @@ jobs:
 
           const mergedLibraries = { libraries: finalLibraries };
           const mergedJson = JSON.stringify(mergedLibraries, null, 2);
-          fs.writeFileSync('merged_libraries.json', mergedJson);
+          fs.writeFileSync('index.json', mergedJson);
         EOF
         node merge_script.js
-        tar -cf merged_libraries.tar merged_libraries.json
-        bzip2 merged_libraries.tar
+        tar -cf index.tar index.json
+        bzip2 index.tar
 
 
     - name: Commit and Push Changes
       run: |
-        git add merged_libraries.tar.bz2
+        git add index.tar.bz2
         git commit -m "CI: Update boards"
         git push origin gh-pages
