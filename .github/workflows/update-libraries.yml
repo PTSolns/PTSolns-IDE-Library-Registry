@@ -69,7 +69,6 @@ jobs:
         cat > merge_script.js << 'EOF'
           const fs = require('fs');
 
-          const localLibraries = JSON.parse(fs.readFileSync('libraries.json', 'utf8')).libraries;
           const arduinoLibraries = JSON.parse(fs.readFileSync('library_index.json', 'utf8')).libraries;
 
           // Function to parse .properties file content into a JSON object
@@ -106,20 +105,12 @@ jobs:
             }
           }
 
-          // Merge logic: Prioritize customLibraries > localLibraries > arduinoLibraries
           let finalLibraries = [];
 
           // Add custom libraries first
           finalLibraries.push(...customLibraries);
 
-          // Add local libraries, if not already present in customLibraries
-          localLibraries.forEach(localLib => {
-            if (!finalLibraries.some(lib => lib.name === localLib.name)) {
-              finalLibraries.push({ ...localLib, source: 'local' });
-            }
-          });
-
-          // Add arduino libraries, if not already present in customLibraries or localLibraries
+          // Add arduino libraries, if not already present in customLibraries
           arduinoLibraries.forEach(arduinoLib => {
             if (!finalLibraries.some(lib => lib.name === arduinoLib.name)) {
               finalLibraries.push({ ...arduinoLib, source: 'arduino' });
