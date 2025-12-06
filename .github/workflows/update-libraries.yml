@@ -133,3 +133,4 @@ jobs:
         message: 'Update merged libraries'
         author_name: 'github-actions[bot]'
         author_email: 'github-actions[bot]@users.noreply.github.com'
+        pull: true
