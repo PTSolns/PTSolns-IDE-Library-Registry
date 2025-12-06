@@ -21,37 +21,41 @@ jobs:
       run: |
         tar -xf library_index.tar.bz2 library_index.json
 
-    - name: Install jq
-      run: sudo apt-get update && sudo apt-get install -y jq bzip2
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Node.js dependencies
+      run: npm install compressjs
 
     - name: Merge and compress libraries
       run: |
-        # Generate LOCAL_LIBS with source and save to a temporary file
-        jq '.libraries | map(. + {source: "local"})' libraries.json > local_libs_temp.json
+        node -e "
+          const fs = require('fs');
+          const bz2 = require('compressjs').BZ2; // Ensure compressjs is installed and available
 
-        # Generate ARDUINO_LIBS with source and save to a temporary file
-        jq '.libraries | map(. + {source: "arduino"})' library_index.json > arduino_libs_temp.json
+          const localLibraries = JSON.parse(fs.readFileSync('libraries.json', 'utf8'));
+          const arduinoLibraries = JSON.parse(fs.readFileSync('library_index.json', 'utf8'));
 
-        # Generate LOCAL_LIB_NAMES from libraries.json
-        jq -c '[.libraries[] | .name]' libraries.json > local_lib_names_temp.json
+          // Merge logic: Prioritize localLibraries for duplicates, otherwise add arduinoLibraries
+          const mergedLibraries = {
+            libraries: [
+              ...localLibraries.libraries.map(lib => ({ ...lib, source: 'local' })),
+              ...arduinoLibraries.libraries.filter(
+                arduinoLib => !localLibraries.libraries.some(localLib => localLib.name === arduinoLib.name)
+              ).map(lib => ({ ...lib, source: 'arduino' }))
+            ]
+          };
 
-        # Filter out Arduino libraries that are already in localLibraries
-        # Read from arduino_libs_temp.json and local_lib_names_temp.json
-        jq --argjson local_lib_names "$(cat local_lib_names_temp.json)" \
-           '. | map(select(.name as $name | $local_lib_names | index($name) | not))' \
-           arduino_libs_temp.json > filtered_arduino_libs_temp.json
+          const mergedJson = JSON.stringify(mergedLibraries, null, 2);
+          fs.writeFileSync('merged_libraries.json', mergedJson);
 
-        # Merge local_libs_temp.json and filtered_arduino_libs_temp.json
-        jq -s '.[0] + .[1]' local_libs_temp.json filtered_arduino_libs_temp.json > merged_libs_array_temp.json
-
-        # Wrap the merged array in a "libraries" object
-        jq -n --argjson merged "$(cat merged_libs_array_temp.json)" '{libraries: $merged}' > merged_libraries.json
-
-        # Compress to .tar.bz2
-        tar -cvjf merged_libraries.tar.bz2 merged_libraries.json
-
-        # Clean up temporary files
-        rm local_libs_temp.json arduino_libs_temp.json local_lib_names_temp.json filtered_arduino_libs_temp.json merged_libs_array_temp.json
+          // Compress to .tar.bz2
+          const data = fs.readFileSync('merged_libraries.json');
+          const compressed = bz2.compressFile(data);
+          fs.writeFileSync('merged_libraries.tar.bz2', Buffer.from(compressed));
+        "
 
     - name: Commit and push to gh-pages
       uses: EndBug/add-and-commit@v9
