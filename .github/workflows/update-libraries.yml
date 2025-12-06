@@ -31,7 +31,7 @@ jobs:
 
         # Merge logic: Prioritize localLibraries for duplicates, otherwise add arduinoLibraries
         # First, create a temporary array of local library names for filtering
-        LOCAL_LIB_NAMES=$(jq -c '[.[] | .name]' libraries.json)
+        LOCAL_LIB_NAMES=$(jq -c '[.libraries[] | .name]' libraries.json)
 
         # Filter out Arduino libraries that are already in localLibraries
         FILTERED_ARDUINO_LIBS=$(jq --argjson local_lib_names "$LOCAL_LIB_NAMES" \
