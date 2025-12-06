@@ -1,7 +1,7 @@
-PTSolns_InterfaceShield
-PTSolns_VEML7700
-PTSolns_AHTx
-PTSolns_PicoBase
-PTSolns_I2CBackpack
-PTSolns_microWatt
-BMx280
+https://github.com/PTSolns/PTSolns_InterfaceShield
+https://github.com/PTSolns/PTSolns_VEML7700
+https://github.com/PTSolns/PTSolns_AHTx
+https://github.com/PTSolns/PTSolns_PicoBase
+https://github.com/PTSolns/PTSolns_I2CBackpack
+https://github.com/PTSolns/PTSolns_microWatt
+https://github.com/PTSolns/BMx280
