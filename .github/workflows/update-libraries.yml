@@ -50,15 +50,10 @@ jobs:
       with:
         node-version: '18'
 
-    - name: Install Node.js dependencies
-      run: npm install compressjs
-
     - name: Merge and compress libraries
       run: |
         cat > merge_script.js << 'EOF'
           const fs = require('fs');
-          const compressjs = require('compressjs');
-          const Bzip2 = compressjs.Bzip2; // Correctly reference Bzip2 algorithm
 
           const localLibraries = JSON.parse(fs.readFileSync('libraries.json', 'utf8')).libraries;
           const arduinoLibraries = JSON.parse(fs.readFileSync('library_index.json', 'utf8')).libraries;
@@ -120,15 +115,10 @@ jobs:
           const mergedLibraries = { libraries: finalLibraries };
           const mergedJson = JSON.stringify(mergedLibraries, null, 2);
           fs.writeFileSync('merged_libraries.json', mergedJson);
-
-          // Compress to .tar.bz2
-          // compressFile expects a Buffer
-          const data = fs.readFileSync('merged_libraries.json');
-          const compressed = Bzip2.compressFile(data);
-          // The result of compressFile is an array of bytes, convert to Buffer for writing
-          fs.writeFileSync('merged_libraries.tar.bz2', Buffer.from(compressed));
         EOF
         node merge_script.js
+        tar -cf merged_libraries.tar merged_libraries.json
+        bzip2 merged_libraries.tar
 
     - name: Ensure merged_libraries.tar.bz2 is not tracked by main
       run: |
