@@ -130,6 +130,11 @@ jobs:
         EOF
         node merge_script.js
 
+    - name: Ensure merged_libraries.tar.bz2 is not tracked by main
+      run: |
+        git rm --cached merged_libraries.tar.bz2 || true
+      shell: bash
+
     - name: Commit and push to gh-pages
       uses: EndBug/add-and-commit@v9
       with:
