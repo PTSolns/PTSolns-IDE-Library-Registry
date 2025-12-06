@@ -16,8 +16,22 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
+
+    - name: Checkout main branch
       uses: actions/checkout@v4
+      with:
+        ref: main # Checkout the main branch
+        fetch-depth: 0 # Fetch all history
+
+    - name: Configure Git
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+
+    - name: Prepare gh-pages branch
+      run: |
+        git checkout -B gh-pages
+        git push -f origin gh-pages
 
     - name: Download library_index.tar.bz2
       run: |
@@ -120,17 +134,9 @@ jobs:
         tar -cf merged_libraries.tar merged_libraries.json
         bzip2 merged_libraries.tar
 
-    - name: Ensure merged_libraries.tar.bz2 is not tracked by main
-      run: |
-        git rm --cached merged_libraries.tar.bz2 || true
-      shell: bash
 
-    - name: Commit and push to gh-pages
-      uses: EndBug/add-and-commit@v9
-      with:
-        add: 'merged_libraries.tar.bz2'
-        new_branch: 'gh-pages'
-        message: 'Update merged libraries'
-        author_name: 'github-actions[bot]'
-        author_email: 'github-actions[bot]@users.noreply.github.com'
-        pull: true
+    - name: Commit and Push Changes
+      run: |
+        git add merged_libraries.tar.bz2
+        git commit -m "CI: Update boards"
+        git push origin gh-pages
