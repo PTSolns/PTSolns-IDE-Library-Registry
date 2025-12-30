@@ -1,4 +1,1 @@
-https://github.com/PTSolns/PTSolns_InterfaceShield
-https://github.com/PTSolns/PTSolns_PicoBase
-https://github.com/PTSolns/PTSolns_I2CBackpack
 https://github.com/PTSolns/PTSolns_microWatt
