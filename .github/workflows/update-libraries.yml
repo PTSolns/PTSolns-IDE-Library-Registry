@@ -67,67 +67,74 @@ jobs:
     - name: Merge and compress libraries
       run: |
         cat > merge_script.js << 'EOF'
-          const fs = require('fs');
+        const fs = require('fs');
 
-          const arduinoLibraries = JSON.parse(fs.readFileSync('library_index.json', 'utf8')).libraries;
+        const arduinoIndex = JSON.parse(fs.readFileSync('library_index.json', 'utf8'));
+        const arduinoLibraries = arduinoIndex.libraries || [];
 
-          // Function to parse .properties file content into a JSON object
-          function parseProperties(content) {
-            const lines = content.split('\\n').filter(line => line.trim() !== '' && !line.startsWith('#'));
-            const obj = {};
-            lines.forEach(line => {
-              const parts = line.split('=');
-              if (parts.length > 1) {
-                const key = parts[0].trim();
-                const value = parts.slice(1).join('=').trim();
-                obj[key] = value;
-              }
-            });
-            return obj;
-          }
-
-          // Read custom library.properties files
-          const customLibrariesDir = 'custom_libraries';
-          let customLibraries = [];
-          if (fs.existsSync(customLibrariesDir)) {
-            const customFiles = fs.readdirSync(customLibrariesDir);
-            for (const file of customFiles) {
-              if (file.endsWith('.properties')) {
-                const filePath = `${customLibrariesDir}/${file}`;
-                const content = fs.readFileSync(filePath, 'utf8');
-                const parsedLib = parseProperties(content);
-                // Ensure the parsed library has a 'name' field for merging
-                if (parsedLib.name) {
-                  customLibraries.push({ ...parsedLib, source: 'custom' });
-                  console.log('Parsed custom library:', JSON.stringify(parsedLib)); // Log custom library objects
-                }
-              }
+        function parseProperties(content) {
+          const lines = content.split('\n').filter(line => line.trim() !== '' && !line.startsWith('#'));
+          const obj = {};
+          for (const line of lines) {
+            const parts = line.split('=');
+            if (parts.length > 1) {
+              const key = parts[0].trim();
+              const value = parts.slice(1).join('=').trim();
+              obj[key] = value;
             }
           }
+          return obj;
+        }
 
-          let finalLibraries = [];
+        const arduinoByName = new Map();
+        for (const lib of arduinoLibraries) {
+          if (lib && lib.name) arduinoByName.set(lib.name, lib);
+        }
 
-          // Add custom libraries first
-          finalLibraries.push(...customLibraries);
+        const customLibrariesDir = 'custom_libraries';
+        const customLibraries = [];
 
-          // Add arduino libraries, if not already present in customLibraries
-          arduinoLibraries.forEach(arduinoLib => {
-            if (!finalLibraries.some(lib => lib.name === arduinoLib.name)) {
-              finalLibraries.push({ ...arduinoLib, source: 'arduino' });
+        if (fs.existsSync(customLibrariesDir)) {
+          const customFiles = fs.readdirSync(customLibrariesDir);
+          for (const file of customFiles) {
+            if (!file.endsWith('.properties')) continue;
+
+            const filePath = `${customLibrariesDir}/${file}`;
+            const content = fs.readFileSync(filePath, 'utf8');
+            const parsed = parseProperties(content);
+
+            if (!parsed.name) continue;
+
+            // Key fix: never override Arduino’s full entry (which contains all releases)
+            if (arduinoByName.has(parsed.name)) {
+              console.log(`Skipping custom override for existing Arduino library: ${parsed.name}`);
+              continue;
             }
-          });
 
-          const mergedLibraries = { libraries: finalLibraries };
-          const mergedJson = JSON.stringify(mergedLibraries, null, 2);
-          fs.writeFileSync('index.json', mergedJson);
+            customLibraries.push({ ...parsed, source: 'custom' });
+          }
+        }
+
+        const finalLibraries = [
+          ...arduinoLibraries.map(l => ({ ...l, source: 'arduino' })),
+          ...customLibraries
+        ];
+
+        fs.writeFileSync('index.json', JSON.stringify({ libraries: finalLibraries }, null, 2));
+        console.log(`Wrote index.json with ${finalLibraries.length} libraries`);
         EOF
+
         node merge_script.js
         tar -cf index.tar index.json
-        bzip2 index.tar
-
+        bzip2 -f index.tar
 
     - name: Commit and Push Changes
       run: |
         git add index.tar.bz2
-        git commit -m "CI: Update boards"
+        if [ -z "$(git status --porcelain)" ]; then
+          echo "No changes to commit."
+          exit 0
+        fi
+        git commit -m "CI: Update library index"
         git push origin gh-pages
+
